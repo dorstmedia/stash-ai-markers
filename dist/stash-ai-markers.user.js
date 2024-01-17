@@ -1,18 +1,18 @@
 // ==UserScript==
-// @name        stashmarkers
+// @name        stash-ai-markers
 // @description Generate markers for a scene
-// @namespace   https://github.com/cc1234475
+// @namespace   https://github.com/dorstmedia
 // @version     0.2.1
-// @homepage    https://github.com/cc1234475/stashmarkers
-// @author      cc12344567
-// @resource    css https://raw.githubusercontent.com/cc1234475/stashmarkers/main/dist/bundle.css
+// @homepage    https://github.com/dorstmedia/stash-ai-markers
+// @author      dorstmedia (forked from cc12344567)
+// @resource    css https://raw.githubusercontent.com/dorstmedia/stash-ai-markers/main/dist/bundle.css
 // @match       http://localhost:9999/*
 // @connect     hf.space
 // @connect     localhost
 // @run-at      document-idle
 // @require     https://raw.githubusercontent.com/7dJx1qP/stash-userscripts/master/src/StashUserscriptLibrary.js
-// @downloadURL https://raw.githubusercontent.com/cc1234475/stashmarkers/main/dist/stashmarkers.user.js
-// @updateURL   https://raw.githubusercontent.com/cc1234475/stashmarkers/main/dist/stashmarkers.user.js
+// @downloadURL https://raw.githubusercontent.com/dorstmedia/stash-ai-markers/main/dist/stash-ai-markers.user.js
+// @updateURL   https://raw.githubusercontent.com/dorstmedia/stash-ai-markers/main/dist/stash-ai-markers.user.js
 // @grant       GM_addStyle
 // @grant       GM_getResourceText
 // @grant       GM_xmlhttpRequest
@@ -86,6 +86,44 @@ GM_addStyle(GM_getResourceText('css'));
     var scenario = result[1];
     var scenario_id = result[2];
     return [scenario, scenario_id];
+  }
+
+  /**
+   * Retrieves the tags associated with a given scene ID.
+   *
+   * @param {string} scene_id - The ID of the scene to retrieve tags for.
+   * @returns {Promise<string[]>} - A promise that resolves with an array of tag IDs.
+   */
+  async function getTagsForScene(scene_id) {
+    const reqData = {
+      query: `{
+      findScene(id: "${scene_id}") {
+        tags {
+          id
+        }
+      }
+    }`,
+    };
+    var result = await stash$1.callGQL(reqData);
+    return result.data.findScene.tags.map((p) => p.id);
+  }
+
+      /**
+   * Updates a scene with the given scene_id and tag_ids.
+   * @param {string} scene_id - The ID of the scene to update.
+   * @param {Array<string>} tag_ids - An array of tag IDs to associate with the scene.
+   * @returns {Promise<Object>} - A promise that resolves with the updated scene object.
+   */
+  async function updateScene(scene_id, tag_ids) {
+    const reqData = {
+      variables: { input: { id: scene_id, tag_ids: tag_ids } },
+      query: `mutation sceneUpdate($input: SceneUpdateInput!){
+      sceneUpdate(input: $input) {
+        id
+      }
+    }`,
+    };
+    return stash$1.callGQL(reqData);
   }
 
   /**
@@ -1561,7 +1599,7 @@ GM_addStyle(GM_getResourceText('css'));
   			t7 = space();
   			button1 = element("button");
   			if (if_block) if_block.c();
-  			t8 = text("\n            Add All Tags");
+  			t8 = text("\n            Add All Markers");
   			attr(input, "type", "range");
   			attr(input, "min", "0.4");
   			attr(input, "max", "0.9");
@@ -1572,10 +1610,10 @@ GM_addStyle(GM_getResourceText('css'));
   			attr(div0, "class", "modal-header svelte-qsvzsw");
   			attr(div1, "class", "row justify-content-center");
   			attr(div2, "class", "modal-body");
-  			attr(button0, "id", "tags-cancel");
+  			attr(button0, "id", "markers-cancel");
   			attr(button0, "type", "button");
   			attr(button0, "class", "ml-2 btn btn-secondary");
-  			attr(button1, "id", "tags-accept");
+  			attr(button1, "id", "markers-accept");
   			attr(button1, "type", "button");
   			attr(button1, "class", "ml-2 btn btn-primary");
   			attr(div4, "class", "ModalFooter modal-footer svelte-qsvzsw");
@@ -1631,6 +1669,7 @@ GM_addStyle(GM_getResourceText('css'));
   			if (dirty & /*threshold*/ 1) {
   				set_input_value(input, /*threshold*/ ctx[0]);
   			}
+
 
   			if ((!current || dirty & /*threshold*/ 1) && t2_value !== (t2_value = /*threshold*/ ctx[0] * 100 + "")) set_data(t2, t2_value);
 
@@ -1699,7 +1738,7 @@ GM_addStyle(GM_getResourceText('css'));
   	let filteredFrames;
   	let { url = "" } = $$props;
   	let { frames = [] } = $$props;
-  	let { threshold = 0.4 } = $$props;
+  	let { threshold = 0.7 } = $$props;
   	let tags;
   	let self;
   	let selected = null;
@@ -1707,7 +1746,7 @@ GM_addStyle(GM_getResourceText('css'));
 
   	onMount(async () => {
   		tags = await getAllTags();
-  		$$invalidate(0, threshold = Number(localStorage.getItem('stash-marker-threshold')) || 0.4);
+  		$$invalidate(0, threshold = Number(localStorage.getItem('stash-marker-threshold')) || 0.7);
   	});
 
   	async function close() {
@@ -1753,7 +1792,22 @@ GM_addStyle(GM_getResourceText('css'));
   		$$invalidate(3, selected = null);
   	}
 
-  	function saveAll() {
+  	async function saveAll() {
+        if (typeof tags["stash_ai_markers"] == 'undefined' || tags["stash_ai_markers"] === undefined) {
+            tags["stash_ai_markers"] = await createTag("STASH_AI_MARKERS");
+        }
+        const [,scene_id] = getScenarioAndID();
+  		let existingTags = await getTagsForScene(scene_id);
+        let newTags = [];
+        console.log("existingTags",existingTags)
+        existingTags.forEach((tag) => {
+            if(tag != tags["stash_sprite_missing"]) newTags.push(tag);
+        });
+        if (typeof tags["stash_ai_markers"] != 'undefined' && !existingTags.includes(tags["stash_ai_markers"])){
+            newTags.push(tags["stash_ai_markers"]);
+        }
+        await updateScene(scene_id, newTags);
+
   		$$invalidate(3, selected = null);
   		$$invalidate(4, saving = true);
 
@@ -1762,7 +1816,7 @@ GM_addStyle(GM_getResourceText('css'));
   		});
 
   		$$invalidate(4, saving = false);
-  		window.location.reload();
+  		//window.location.reload();
   		close();
   	}
 
@@ -1832,7 +1886,7 @@ GM_addStyle(GM_getResourceText('css'));
   class Matches extends SvelteComponent {
   	constructor(options) {
   		super();
-  		init(this, options, instance$1, create_fragment$1, safe_not_equal, { url: 1, frames: 11, threshold: 0 });
+  		init(this, options, instance$1, create_fragment$1, safe_not_equal, { url: 1, frames: 12, threshold: 0.7 });
   	}
   }
 
@@ -1893,7 +1947,13 @@ GM_addStyle(GM_getResourceText('css'));
   		let url = await getUrlSprite(scene_id);
 
   		if (!url) {
-  			alert("No sprite found, please ensure you have sprites enabled and generated for your scenes.");
+  			console.log("No sprite found, please ensure you have sprites enabled and generated for your scenes.");
+            let tags = await getAllTags();
+            if (typeof tags["stash_missing_sprites"] == 'undefined') tags["stash_missing_sprites"] = await createTag("STASH_MISSING_SPRITES");
+            let existingTags = await getTagsForScene(scene_id);
+            if (typeof tags["stash_missing_sprites"] != 'undefined' && !existingTags.includes(tags["stash_missing_sprites"])) existingTags.push(tags["stash_missing_sprites"]);
+            await updateScene(scene_id, existingTags);
+
   			$$invalidate(0, scanner = false);
   			return;
   		}
@@ -1919,7 +1979,7 @@ GM_addStyle(GM_getResourceText('css'));
   			onload(response) {
   				if (response.status !== 200) {
   					$$invalidate(0, scanner = false);
-  					alert("Something went wrong. It's likely a server issue, Please try again later.");
+  					console.log("Something went wrong. It's likely a server issue, Please try again later.");
   					return;
   				}
 
@@ -1934,7 +1994,7 @@ GM_addStyle(GM_getResourceText('css'));
   				$$invalidate(0, scanner = false);
 
   				if (frames.length === 0) {
-  					alert("No tags found");
+  					console.log("No markers found");
   					return;
   				}
 
