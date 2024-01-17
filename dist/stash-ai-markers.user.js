@@ -1,6 +1,7 @@
 // ==UserScript==
 // @name        stash-ai-markers
 // @description Generate markers for a scene
+// @icon          https://docs.stashapp.cc/favicon.ico
 // @namespace   https://github.com/dorstmedia
 // @version     0.2.1
 // @homepage    https://github.com/dorstmedia/stash-ai-markers
